@@ -1,26 +1,68 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+import random
 
 app = Flask(__name__)
+CORS(app)
 
-@app.route("/recipe", methods=["POST"])
-def recipe():
-    data = request.json
-    products = data.get("products", "")
+# prosta pamięć historii (na razie w RAM)
+history = []
 
-    # FAKE AI - póki co tylko tekst
-    recipe_text = f"""
-PRZEPIS:
+@app.route("/")
+def home():
+    return "FridgeMate API działa 🚀"
 
-Z podanych składników ({products}) możesz zrobić szybki omlet:
+# =============================
+# GENEROWANIE PRZEPISU
+# =============================
+@app.route("/generate", methods=["POST"])
+def generate_recipe():
+    data = request.get_json()
+    ingredients = data.get("ingredients", [])
 
-1. Pokrój składniki
-2. Rozbij 2-3 jajka
-3. Wymieszaj
-4. Smaż 5 minut na patelni
+    # Na razie prosta symulacja AI
+    title = f"Przepis z: {', '.join(ingredients)}"
+    description = (
+        f"1. Przygotuj: {', '.join(ingredients)}.\n"
+        f"2. Wymieszaj wszystko razem.\n"
+        f"3. Gotuj 15 minut.\n"
+        f"4. Smacznego!"
+    )
 
-Smacznego 😄
-"""
+    recipe = {
+        "title": title,
+        "description": description
+    }
 
-    return jsonify({"recipe": recipe_text})
+    history.append(recipe)
 
-app.run(host="0.0.0.0", port=5000)
+    return jsonify(recipe)
+
+# =============================
+# GOTOWE PRZEPISY
+# =============================
+@app.route("/ready_recipes", methods=["GET"])
+def ready_recipes():
+    recipes = [
+        {
+            "title": "Jajecznica klasyczna",
+            "description": "1. Rozbij jajka.\n2. Smaż 5 minut.\n3. Dopraw solą."
+        },
+        {
+            "title": "Owsianka z owocami",
+            "description": "1. Zagotuj mleko.\n2. Dodaj płatki.\n3. Dorzuć owoce."
+        }
+    ]
+
+    return jsonify({"recipes": recipes})
+
+# =============================
+# HISTORIA
+# =============================
+@app.route("/history", methods=["GET"])
+def get_history():
+    return jsonify({"history": history})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
