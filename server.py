@@ -1,68 +1,109 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
-import random
+from datetime import datetime
+import time
 
 app = Flask(__name__)
-CORS(app)
 
-# prosta pamięć historii (na razie w RAM)
-history = []
+# Prosta pamięć w RAM (MVP)
+user_limits = {}
+last_request_time = {}
+
+DAILY_LIMIT = 2
+COOLDOWN_SECONDS = 3
+MAX_INGREDIENTS = 10
+MAX_INGREDIENT_LENGTH = 30
+
 
 @app.route("/")
 def home():
-    return "FridgeMate API działa 🚀"
+    return "FridgeServer działa 🚀"
 
-# =============================
-# GENEROWANIE PRZEPISU
-# =============================
+
 @app.route("/generate", methods=["POST"])
 def generate_recipe():
+    user_ip = request.remote_addr
+    now_time = time.time()
+
+    # --- Anty-spam (cooldown) ---
+    if user_ip in last_request_time:
+        if now_time - last_request_time[user_ip] < COOLDOWN_SECONDS:
+            return jsonify({
+                "error": "Za szybko! Poczekaj chwilę.",
+                "remaining": get_remaining(user_ip)
+            }), 429
+
+    last_request_time[user_ip] = now_time
+
+    # --- Reset limitu o północy ---
+    today = datetime.now().date()
+
+    if user_ip not in user_limits:
+        user_limits[user_ip] = {"date": today, "count": 0}
+
+    if user_limits[user_ip]["date"] != today:
+        user_limits[user_ip] = {"date": today, "count": 0}
+
+    # --- Sprawdzenie limitu ---
+    if user_limits[user_ip]["count"] >= DAILY_LIMIT:
+        return jsonify({
+            "error": "Wykorzystałeś dzisiejszy limit.",
+            "remaining": 0
+        }), 403
+
     data = request.get_json()
+
+    if not data or "ingredients" not in data:
+        return jsonify({"error": "Brak składników", "remaining": get_remaining(user_ip)}), 400
+
     ingredients = data.get("ingredients", [])
 
-    # Na razie prosta symulacja AI
-    title = f"Przepis z: {', '.join(ingredients)}"
-    description = (
-        f"1. Przygotuj: {', '.join(ingredients)}.\n"
-        f"2. Wymieszaj wszystko razem.\n"
-        f"3. Gotuj 15 minut.\n"
-        f"4. Smacznego!"
-    )
+    # --- Zabezpieczenia ---
+    if not isinstance(ingredients, list):
+        return jsonify({"error": "Niepoprawny format składników", "remaining": get_remaining(user_ip)}), 400
 
-    recipe = {
-        "title": title,
-        "description": description
+    if len(ingredients) == 0 or len(ingredients) > MAX_INGREDIENTS:
+        return jsonify({"error": "Niepoprawna liczba składników", "remaining": get_remaining(user_ip)}), 400
+
+    for i in ingredients:
+        if not isinstance(i, str) or len(i) > MAX_INGREDIENT_LENGTH:
+            return jsonify({"error": "Niepoprawny składnik", "remaining": get_remaining(user_ip)}), 400
+
+    # --- Fake generowanie ---
+    fake_recipe = {
+        "title": f"Szybkie danie z {', '.join(ingredients[:2])}",
+        "description": "Prosty przepis wygenerowany testowo.",
+        "steps": [
+            "Pokrój wszystkie składniki.",
+            "Podsmaż je na patelni przez 5–7 minut.",
+            "Dopraw solą i pieprzem do smaku.",
+            "Podawaj na ciepło."
+        ]
     }
 
-    history.append(recipe)
+    # Zwiększamy licznik
+    user_limits[user_ip]["count"] += 1
 
-    return jsonify(recipe)
+    remaining = get_remaining(user_ip)
 
-# =============================
-# GOTOWE PRZEPISY
-# =============================
-@app.route("/ready_recipes", methods=["GET"])
-def ready_recipes():
-    recipes = [
-        {
-            "title": "Jajecznica klasyczna",
-            "description": "1. Rozbij jajka.\n2. Smaż 5 minut.\n3. Dopraw solą."
-        },
-        {
-            "title": "Owsianka z owocami",
-            "description": "1. Zagotuj mleko.\n2. Dodaj płatki.\n3. Dorzuć owoce."
-        }
-    ]
+    return jsonify({
+        "title": fake_recipe["title"],
+        "description": fake_recipe["description"],
+        "steps": fake_recipe["steps"],
+        "remaining": remaining
+    })
 
-    return jsonify({"recipes": recipes})
 
-# =============================
-# HISTORIA
-# =============================
-@app.route("/history", methods=["GET"])
-def get_history():
-    return jsonify({"history": history})
+def get_remaining(user_ip):
+    today = datetime.now().date()
+
+    if user_ip not in user_limits:
+        return DAILY_LIMIT
+
+    if user_limits[user_ip]["date"] != today:
+        return DAILY_LIMIT
+
+    return DAILY_LIMIT - user_limits[user_ip]["count"]
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=5000)
