@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-model = genai.GenerativeModel("gemini-3.1-flash-lite")
+model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
 
 @app.route("/generate", methods=["POST"])
 def generate_recipe():
