@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+model = genai.GenerativeModel("gemini-3.1-flash-prewiew")
 
 @app.route("/generate", methods=["POST"])
 def generate_recipe():
@@ -27,19 +27,23 @@ Zwróć WYŁĄCZNIE poprawny JSON w formacie:
   "steps": ["krok 1", "krok 2", "krok 3"]
 }}
 
-Bez żadnego dodatkowego tekstu.
+STRICT JSON ONLY. NO MARKDOWN. NO EXTRA TEXT.
 """
 
     try:
         response = model.generate_content(prompt)
 
-        text = response.text
+        text = response.text.strip()
+
+        # 🔥 usuwa ```json ``` jeśli Gemini je doda
+        if text.startswith("```"):
+            text = text.replace("```json", "").replace("```", "").strip()
 
         try:
             recipe_json = json.loads(text)
-        except:
+        except Exception as e:
             return jsonify({
-                "error": "AI zwróciło zły JSON",
+                "error": "JSON parse error",
                 "raw": text
             }), 500
 
