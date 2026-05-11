@@ -20,6 +20,8 @@ def generate_recipe():
     prompt = f"""
 Stwórz przepis kulinarny na podstawie tych składników: {', '.join(ingredients)}.
 
+Prezpis MUSI być w tym samym języku, w którym napisano składniki
+
 Zwróć WYŁĄCZNIE poprawny JSON w formacie:
 {{
   "title": "Nazwa przepisu",
