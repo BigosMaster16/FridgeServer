@@ -11,7 +11,7 @@ CORS(app) # To pozwoli Twojej apce we Flutterze bez problemu pobierać dane
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # Zmieniamy na stabilny model 1.5 Flash - jest błyskawiczny
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("3.1-flash-lite-preview")
 
 @app.route("/generate", methods=["POST"])
 def generate_recipe():
