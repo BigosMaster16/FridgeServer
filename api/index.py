@@ -1,65 +1,48 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS  # Dodajemy obsługę połączeń z zewnątrz
-import google.generativeai as genai
 import os
 import json
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import google.generativeai as genai
 
 app = Flask(__name__)
-CORS(app) # To pozwoli Twojej apce we Flutterze bez problemu pobierać dane
-
-# Konfiguracja Gemini
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-
-# Zmieniamy na stabilny model 1.5 Flash - jest błyskawiczny
-model = genai.GenerativeModel("3.1-flash-lite-preview")
+CORS(app)
 
 @app.route("/generate", methods=["POST"])
 def generate_recipe():
-    data = request.json
-    ingredients = data.get("ingredients", [])
-
-    if not ingredients:
-        return jsonify({"error": "Brak składników"}), 400
-
-    prompt = f"""
-Stwórz przepis kulinarny na podstawie tych składników: {', '.join(ingredients)}.
-
-Przepis MUSI być w tym samym języku, w którym napisano składniki.
-
-Zwróć WYŁĄCZNIE poprawny JSON w formacie:
-{{
-  "title": "Nazwa przepisu",
-  "description": "Krótki opis",
-  "steps": ["krok 1", "krok 2", "krok 3"]
-}}
-
-STRICT JSON ONLY. NO MARKDOWN. NO EXTRA TEXT.
-"""
+    # 1. Sprawdzenie klucza - czy Vercel go w ogóle widzi?
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "Serwer nie widzi klucza API (GEMINI_API_KEY is None)"}), 500
 
     try:
-        response = model.generate_content(prompt)
-        text = response.text.strip()
+        # 2. Próba konfiguracji
+        genai.configure(api_key=api_key)
+        
+        # Używamy modelu, który na 100% istnieje i jest stabilny
+        model = genai.GenerativeModel("gemini-1.5-flash")
 
-        # Usuwanie znaczników markdown, jeśli Gemini je doda
+        data = request.json
+        ingredients = data.get("ingredients", [])
+        
+        # 3. Próba kontaktu z Google
+        prompt = f"Napisz krótki przepis z: {', '.join(ingredients)}. Zwróć tylko JSON: {{\"title\": \"\", \"description\": \"\", \"steps\": []}}"
+        response = model.generate_content(prompt)
+        
+        if not response:
+            return jsonify({"error": "Brak odpowiedzi od Google AI"}), 500
+
+        # Wyciąganie tekstu
+        text = response.text.strip()
         if text.startswith("```"):
             text = text.replace("```json", "").replace("```", "").strip()
 
-        try:
-            recipe_json = json.loads(text)
-        except Exception as e:
-            return jsonify({
-                "error": "Brak poprawnej odpowiedzi od AI",
-                "raw": text
-            }), 500
-
-        return jsonify({
-            "title": recipe_json.get("title", "Przepis"),
-            "description": recipe_json.get("description", ""),
-            "steps": recipe_json.get("steps", []),
-            "remaining": 999
-        })
+        return jsonify(json.loads(text))
 
     except Exception as e:
-        return jsonify({"error": "Błąd połączenia z AI. Spróbuj za chwilę."}), 500
+        # TO JEST KLUCZOWE: Wyśle Ci konkretny błąd (np. brak biblioteki, zły model)
+        return jsonify({
+            "error": f"Błąd Python: {str(type(e).__name__)} - {str(e)}",
+            "remaining": 0
+        }), 500
 
-# Na Vercel NIE dodajemy app.run() - Vercel sam zarządza startem aplikacji
+# Vercel wymaga tego, by app był dostępny
