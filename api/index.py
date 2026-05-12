@@ -1,13 +1,17 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Dodajemy obsługę połączeń z zewnątrz
 import google.generativeai as genai
 import os
 import json
 
 app = Flask(__name__)
+CORS(app) # To pozwoli Twojej apce we Flutterze bez problemu pobierać dane
 
+# Konfiguracja Gemini
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+# Zmieniamy na stabilny model 1.5 Flash - jest błyskawiczny
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 @app.route("/generate", methods=["POST"])
 def generate_recipe():
@@ -20,7 +24,7 @@ def generate_recipe():
     prompt = f"""
 Stwórz przepis kulinarny na podstawie tych składników: {', '.join(ingredients)}.
 
-Prezpis MUSI być w tym samym języku, w którym napisano składniki
+Przepis MUSI być w tym samym języku, w którym napisano składniki.
 
 Zwróć WYŁĄCZNIE poprawny JSON w formacie:
 {{
@@ -34,10 +38,9 @@ STRICT JSON ONLY. NO MARKDOWN. NO EXTRA TEXT.
 
     try:
         response = model.generate_content(prompt)
-
         text = response.text.strip()
 
-        # 🔥 usuwa ```json ``` jeśli Gemini je doda
+        # Usuwanie znaczników markdown, jeśli Gemini je doda
         if text.startswith("```"):
             text = text.replace("```json", "").replace("```", "").strip()
 
@@ -45,20 +48,18 @@ STRICT JSON ONLY. NO MARKDOWN. NO EXTRA TEXT.
             recipe_json = json.loads(text)
         except Exception as e:
             return jsonify({
-                "error": "JSON parse error",
+                "error": "Brak poprawnej odpowiedzi od AI",
                 "raw": text
             }), 500
 
         return jsonify({
-            "title": recipe_json.get("title"),
-            "description": recipe_json.get("description"),
-            "steps": recipe_json.get("steps"),
+            "title": recipe_json.get("title", "Przepis"),
+            "description": recipe_json.get("description", ""),
+            "steps": recipe_json.get("steps", []),
             "remaining": 999
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Błąd połączenia z AI. Spróbuj za chwilę."}), 500
 
-
-if __name__ == "__main__":
-    app.run()
+# Na Vercel NIE dodajemy app.run() - Vercel sam zarządza startem aplikacji
