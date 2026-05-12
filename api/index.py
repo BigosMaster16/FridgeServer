@@ -1,39 +1,48 @@
+import os
+import json
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import google.generativeai as genai
+
+# VERCEL SZUKA TEGO TUTAJ:
+app = Flask(__name__)
+CORS(app)
+
+@app.route("/")
+def hello():
+    return "Serwer działa!"
+
 @app.route("/generate", methods=["POST"])
 def generate_recipe():
-    # TEST 1: Sprawdzamy czy zmienna w ogóle istnieje w systemie
-    all_env_vars = list(os.environ.keys())
-    has_key = "GEMINI_API_KEY" in os.environ
+    # Pobieramy klucz
+    api_key = os.environ.get("GEMINI_API_KEY")
     
-    # TEST 2: Pobieramy klucz
-    key = os.environ.get("GEMINI_API_KEY", "")
-
-    # Jeśli klucza nie ma, wyślemy listę wszystkich dostępnych nazw zmiennych 
-    # (bezpiecznie, same nazwy bez wartości!), żeby zobaczyć czy Vercel ich nie zmienił
-    if not has_key or len(key) < 5:
-        return jsonify({
-            "error": "Klucz nieodnaleziony w systemie!",
-            "dostepne_zmienne": all_env_vars,
-            "czy_klucz_pusty": len(key) == 0
-        }), 500
+    if not api_key:
+        return jsonify({"error": "Brak klucza w środowisku"}), 500
 
     try:
-        # TEST 3: Ręczne przypisanie klucza bezpośrednio do konfiguracji
-        genai.configure(api_key=key)
-        
-        # Sprawdzamy czy konfiguracja 'przeszła'
+        # Konfiguracja
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-flash")
-        
+
         data = request.json
         ingredients = data.get("ingredients", [])
         
-        # Króciutki test kontaktu
-        response = model.generate_content("Say OK")
+        prompt = f"Napisz przepis z: {', '.join(ingredients)}. Zwróć JSON: {{\"title\": \"\", \"description\": \"\", \"steps\": []}}"
         
-        return jsonify({"message": "Sukces! Gemini widzi klucz", "odpowiedz": response.text})
+        response = model.generate_content(prompt)
+        
+        # Wyciągamy tekst i czyścimy z ```json ... ```
+        raw_text = response.text.strip()
+        if "```" in raw_text:
+            raw_text = raw_text.split("```")[1].replace("json", "").strip()
+
+        return jsonify(json.loads(raw_text))
 
     except Exception as e:
-        return jsonify({
-            "error_type": str(type(e).__name__),
-            "error_msg": str(e),
-            "uzyty_klucz_poczatek": key[:4] + "****" # Pokaże pierwsze 4 znaki by sprawdzić czy to ten klucz
-        }), 500
+        return jsonify({"error": str(e)}), 500
+
+# To jest tylko dla testów lokalnych, Vercel tego nie używa, 
+# ale ważne, żeby 'app' był zdefiniowany wyżej
+if __name__ == "__main__":
+    app.run()
