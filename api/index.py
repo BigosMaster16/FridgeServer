@@ -23,7 +23,7 @@ def generate_recipe():
     try:
         # Konfiguracja
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-3.1-flash-lite")
 
         data = request.json
         ingredients = data.get("ingredients", [])
