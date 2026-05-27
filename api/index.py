@@ -28,7 +28,7 @@ def generate_recipe():
         data = request.json
         ingredients = data.get("ingredients", [])
         
-        prompt = f"Napisz przepis z: {', '.join(ingredients)}. Zwróć JSON: {{\"title\": \"\", \"description\": \"\", \"steps\": []}}"
+        prompt = f"Napisz przepis z: {', '.join(ingredients)}. Przepis powinien być w tym samym języku, w którym napisano składniki. Zwróć JSON: {{\"title\": \"\", \"description\": \"\", \"steps\": []}}"
         
         response = model.generate_content(prompt)
         
