@@ -2,12 +2,17 @@ import base64
 import binascii
 import json
 import os
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
+from urllib.parse import parse_qs
+from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
 import firebase_admin
 import google.generativeai as genai
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from firebase_admin import auth, credentials, db
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -17,6 +22,8 @@ app = Flask(__name__)
 CORS(app)
 
 DAILY_GENERATION_LIMIT = 2
+MAX_REWARDED_GENERATION_BALANCE = 1
+ADMOB_VERIFIER_KEYS_URL = "https://www.gstatic.com/admob/reward/verifier-keys.json"
 PHOTO_WEEKLY_GENERATION_LIMIT = 5
 PHOTO_MAX_UPLOAD_BYTES = 3 * 1024 * 1024
 PHOTO_MAX_IMAGE_SIDE = 640
@@ -31,6 +38,10 @@ class DailyLimitExceeded(Exception):
 
 
 class PhotoWeeklyLimitExceeded(Exception):
+    pass
+
+
+class DuplicateRewardTransaction(Exception):
     pass
 
 
@@ -74,6 +85,14 @@ def _usage_reference(uid):
     return db.reference(f"generation_usage/{uid}/{day_key}")
 
 
+def _rewarded_generation_reference(uid):
+    return db.reference(f"rewarded_generation_balance/{uid}")
+
+
+def _reward_transaction_reference(transaction_id):
+    return db.reference(f"admob_reward_transactions/{transaction_id}")
+
+
 def _reserve_generation(uid):
     usage_ref = _usage_reference(uid)
 
@@ -83,18 +102,146 @@ def _reserve_generation(uid):
             raise DailyLimitExceeded()
         return current_count + 1
 
-    used_count = int(usage_ref.transaction(increment))
-    return DAILY_GENERATION_LIMIT - used_count
+    try:
+        used_count = int(usage_ref.transaction(increment))
+        daily_remaining = max(0, DAILY_GENERATION_LIMIT - used_count)
+        rewarded_remaining = _get_rewarded_generation_balance(uid)
+        return {
+            "remaining": daily_remaining + rewarded_remaining,
+            "rewardedRemaining": rewarded_remaining,
+            "usedRewarded": False,
+        }
+    except DailyLimitExceeded:
+        pass
+
+    reward_ref = _rewarded_generation_reference(uid)
+
+    def consume_reward(current_value):
+        current_count = int(current_value or 0)
+        if current_count <= 0:
+            raise DailyLimitExceeded()
+        return current_count - 1
+
+    rewarded_remaining = int(reward_ref.transaction(consume_reward))
+    return {
+        "remaining": rewarded_remaining,
+        "rewardedRemaining": rewarded_remaining,
+        "usedRewarded": True,
+    }
 
 
-def _release_generation(uid):
+def _release_generation(uid, used_rewarded=False):
+    if used_rewarded:
+        reward_ref = _rewarded_generation_reference(uid)
+
+        def restore_reward(current_value):
+            current_count = int(current_value or 0)
+            return min(MAX_REWARDED_GENERATION_BALANCE, current_count + 1)
+
+        reward_ref.transaction(restore_reward)
+        return
+
     usage_ref = _usage_reference(uid)
 
-    def decrement(current_value):
+    def decrement_daily(current_value):
         current_count = int(current_value or 0)
         return max(0, current_count - 1)
 
-    usage_ref.transaction(decrement)
+    usage_ref.transaction(decrement_daily)
+
+
+def _get_rewarded_generation_balance(uid):
+    return int(_rewarded_generation_reference(uid).get() or 0)
+
+
+def _grant_rewarded_generation(uid):
+    reward_ref = _rewarded_generation_reference(uid)
+
+    def grant(current_value):
+        current_count = int(current_value or 0)
+        return min(MAX_REWARDED_GENERATION_BALANCE, current_count + 1)
+
+    return int(reward_ref.transaction(grant))
+
+
+def _base64_url_decode(value):
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def _fetch_admob_public_keys():
+    keys_url = os.environ.get("ADMOB_VERIFIER_KEYS_URL", ADMOB_VERIFIER_KEYS_URL)
+    with urlopen(keys_url, timeout=5) as response:
+        payload = response.read().decode("utf-8")
+
+    keys = {}
+    for key in json.loads(payload).get("keys", []):
+        key_id = str(key.get("keyId"))
+        key_bytes = base64.b64decode(key.get("base64", ""))
+        keys[key_id] = serialization.load_der_public_key(key_bytes)
+
+    return keys
+
+
+def _verify_admob_reward_callback():
+    query_bytes = request.query_string
+    signature_marker = b"&signature="
+    signature_index = query_bytes.find(signature_marker)
+    if signature_index <= 0:
+        raise PermissionError("Brak podpisu AdMob")
+
+    signed_data = query_bytes[:signature_index]
+    query = parse_qs(query_bytes.decode("utf-8"), keep_blank_values=True)
+    signature = query.get("signature", [""])[0]
+    key_id = query.get("key_id", [""])[0]
+    transaction_id = query.get("transaction_id", [""])[0]
+    uid = query.get("user_id", [""])[0]
+    custom_data = query.get("custom_data", [""])[0]
+    ad_unit = query.get("ad_unit", [""])[0]
+
+    if not signature or not key_id or not transaction_id or not uid:
+        raise PermissionError("Niepelny callback AdMob")
+
+    expected_custom_data = os.environ.get(
+        "ADMOB_REWARD_CUSTOM_DATA",
+        "recipe_generation",
+    )
+    if custom_data and custom_data != expected_custom_data:
+        raise PermissionError("Nieprawidlowe custom_data AdMob")
+
+    expected_ad_unit = os.environ.get("ADMOB_REWARDED_AD_UNIT_ID")
+    if expected_ad_unit and ad_unit != expected_ad_unit:
+        raise PermissionError("Nieprawidlowa jednostka reklamy AdMob")
+
+    public_key = _fetch_admob_public_keys().get(key_id)
+    if public_key is None:
+        raise PermissionError("Nieznany klucz AdMob")
+
+    try:
+        public_key.verify(
+            _base64_url_decode(signature),
+            signed_data,
+            ec.ECDSA(hashes.SHA256()),
+        )
+    except InvalidSignature as error:
+        raise PermissionError("Nieprawidlowy podpis AdMob") from error
+
+    return uid, transaction_id
+
+
+def _mark_reward_transaction(transaction_id, uid):
+    transaction_ref = _reward_transaction_reference(transaction_id)
+
+    def reserve(current_value):
+        if current_value:
+            raise DuplicateRewardTransaction()
+
+        return {
+            "uid": uid,
+            "createdAt": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        }
+
+    transaction_ref.transaction(reserve)
 
 
 def _photo_usage_reference(uid):
@@ -220,10 +367,37 @@ def generation_status():
     try:
         uid = _get_authenticated_uid()
         used_count = int(_usage_reference(uid).get() or 0)
-        remaining = max(0, DAILY_GENERATION_LIMIT - used_count)
-        return jsonify({"remaining": remaining, "limit": DAILY_GENERATION_LIMIT})
+        daily_remaining = max(0, DAILY_GENERATION_LIMIT - used_count)
+        rewarded_remaining = _get_rewarded_generation_balance(uid)
+        return jsonify(
+            {
+                "remaining": daily_remaining + rewarded_remaining,
+                "dailyRemaining": daily_remaining,
+                "rewardedRemaining": rewarded_remaining,
+                "limit": DAILY_GENERATION_LIMIT,
+            }
+        )
     except Exception as error:
         return _authentication_error(error)
+
+
+@app.route("/admob-reward-callback", methods=["GET"])
+def admob_reward_callback():
+    try:
+        _initialize_firebase()
+        uid, transaction_id = _verify_admob_reward_callback()
+        _mark_reward_transaction(transaction_id, uid)
+        rewarded_remaining = _grant_rewarded_generation(uid)
+        return jsonify(
+            {
+                "status": "ok",
+                "rewardedRemaining": rewarded_remaining,
+            }
+        )
+    except DuplicateRewardTransaction:
+        return jsonify({"status": "duplicate"}), 200
+    except Exception as error:
+        return jsonify({"error": str(error)}), 403
 
 
 @app.route("/photo-generation-status", methods=["GET"])
@@ -256,7 +430,7 @@ def generate_recipe():
 
     try:
         uid = _get_authenticated_uid()
-        remaining = _reserve_generation(uid)
+        reservation = _reserve_generation(uid)
     except DailyLimitExceeded:
         return _limit_error()
     except Exception as error:
@@ -273,10 +447,11 @@ def generate_recipe():
 
         response = model.generate_content(prompt)
         parsed = _parse_json_response(response)
-        parsed["remaining"] = remaining
+        parsed["remaining"] = reservation["remaining"]
+        parsed["rewardedRemaining"] = reservation["rewardedRemaining"]
         return jsonify(parsed)
     except Exception as error:
-        _release_generation(uid)
+        _release_generation(uid, reservation["usedRewarded"])
         return jsonify({"error": str(error)}), 500
 
 
@@ -294,7 +469,7 @@ def generate_craving_recipe():
 
     try:
         uid = _get_authenticated_uid()
-        remaining = _reserve_generation(uid)
+        reservation = _reserve_generation(uid)
     except DailyLimitExceeded:
         return _limit_error()
     except Exception as error:
@@ -345,10 +520,11 @@ Zwroc tylko poprawny JSON bez markdown i bez dodatkowego tekstu:
         parsed.setdefault("nutrition", {})
         parsed.setdefault("steps", [])
         parsed.setdefault("description", "")
-        parsed["remaining"] = remaining
+        parsed["remaining"] = reservation["remaining"]
+        parsed["rewardedRemaining"] = reservation["rewardedRemaining"]
         return jsonify(parsed)
     except Exception as error:
-        _release_generation(uid)
+        _release_generation(uid, reservation["usedRewarded"])
         return jsonify({"error": str(error)}), 500
 
 
