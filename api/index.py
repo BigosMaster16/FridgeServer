@@ -10,9 +10,6 @@ from zoneinfo import ZoneInfo
 
 import firebase_admin
 import google.generativeai as genai
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
 from firebase_admin import auth, credentials, db
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -170,6 +167,8 @@ def _base64_url_decode(value):
 
 
 def _fetch_admob_public_keys():
+    from cryptography.hazmat.primitives import serialization
+
     keys_url = os.environ.get("ADMOB_VERIFIER_KEYS_URL", ADMOB_VERIFIER_KEYS_URL)
     with urlopen(keys_url, timeout=5) as response:
         payload = response.read().decode("utf-8")
@@ -184,6 +183,10 @@ def _fetch_admob_public_keys():
 
 
 def _verify_admob_reward_callback():
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+
     query_bytes = request.query_string
     signature_marker = b"&signature="
     signature_index = query_bytes.find(signature_marker)
