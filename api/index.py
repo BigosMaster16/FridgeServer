@@ -90,6 +90,30 @@ def _reward_transaction_reference(transaction_id):
     return db.reference(f"admob_reward_transactions/{transaction_id}")
 
 
+def _delete_account_data(uid):
+    """Remove every server-side record that is owned by one Firebase user."""
+    root_reference = db.reference()
+    root_reference.update(
+        {
+            f"generation_usage/{uid}": None,
+            f"photo_generation_usage/{uid}": None,
+            f"rewarded_generation_balance/{uid}": None,
+        }
+    )
+
+    # Reward transactions are keyed by AdMob transaction ID, so remove only
+    # records whose owner is the account being deleted.
+    transactions_reference = db.reference("admob_reward_transactions")
+    transactions = transactions_reference.get() or {}
+    transaction_deletions = {
+        transaction_id: None
+        for transaction_id, value in transactions.items()
+        if isinstance(value, dict) and value.get("uid") == uid
+    }
+    if transaction_deletions:
+        transactions_reference.update(transaction_deletions)
+
+
 def _reserve_generation(uid):
     usage_ref = _usage_reference(uid)
 
@@ -422,6 +446,64 @@ def photo_generation_status():
 @app.route("/")
 def hello():
     return "Serwer dziala!"
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    checks = {
+        "ok": True,
+        "firebaseServiceAccountJson": bool(
+            os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+        ),
+        "geminiApiKey": bool(os.environ.get("GEMINI_API_KEY")),
+        "firebaseDatabaseUrl": os.environ.get(
+            "FIREBASE_DATABASE_URL",
+            DEFAULT_DATABASE_URL,
+        ),
+        "geminiModel": os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite"),
+        "photoGeminiModel": os.environ.get(
+            "PHOTO_GEMINI_MODEL",
+            "gemini-3.5-flash-lite",
+        ),
+    }
+
+    try:
+        import PIL  # noqa: F401
+
+        checks["pillow"] = True
+    except Exception as error:
+        checks["ok"] = False
+        checks["pillow"] = str(error)
+
+    try:
+        import cryptography  # noqa: F401
+
+        checks["cryptography"] = True
+    except Exception as error:
+        checks["cryptography"] = str(error)
+
+    try:
+        _initialize_firebase()
+        checks["firebase"] = True
+    except Exception as error:
+        checks["ok"] = False
+        checks["firebase"] = str(error)
+
+    return jsonify(checks), 200 if checks["ok"] else 500
+
+
+@app.route("/delete-account", methods=["DELETE"])
+def delete_account():
+    try:
+        uid = _get_authenticated_uid()
+        _delete_account_data(uid)
+        auth.delete_user(uid)
+        return jsonify({"status": "deleted"})
+    except PermissionError as error:
+        return _authentication_error(error)
+    except Exception as error:
+        app.logger.exception("Nie udalo sie usunac konta")
+        return jsonify({"error": "Nie udalo sie usunac konta. Sprobuj ponownie."}), 500
 
 
 @app.route("/generate", methods=["POST"])
