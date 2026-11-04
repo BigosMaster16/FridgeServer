@@ -496,7 +496,27 @@ def health():
 def delete_account():
     try:
         uid = _get_authenticated_uid()
+    except Exception as error:
+        app.logger.exception("Nie udalo sie potwierdzic konta do usuniecia")
+        return jsonify(
+            {
+                "error": "Nie udalo sie potwierdzic konta.",
+                "errorCode": "account-authentication-failed",
+            }
+        ), 401
+
+    try:
         _delete_account_data(uid)
+    except Exception as error:
+        app.logger.exception("Nie udalo sie usunac danych konta")
+        return jsonify(
+            {
+                "error": "Nie udalo sie usunac danych konta.",
+                "errorCode": "account-data-delete-failed",
+            }
+        ), 500
+
+    try:
         try:
             auth.delete_user(uid)
         except auth.UserNotFoundError:
@@ -504,11 +524,14 @@ def delete_account():
             # its response before the app could sign out locally.
             pass
         return jsonify({"status": "deleted"})
-    except PermissionError as error:
-        return _authentication_error(error)
     except Exception as error:
         app.logger.exception("Nie udalo sie usunac konta")
-        return jsonify({"error": "Nie udalo sie usunac konta. Sprobuj ponownie."}), 500
+        return jsonify(
+            {
+                "error": "Nie udalo sie usunac konta.",
+                "errorCode": "firebase-auth-delete-failed",
+            }
+        ), 500
 
 
 @app.route("/generate", methods=["POST"])
