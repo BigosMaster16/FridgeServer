@@ -497,7 +497,12 @@ def delete_account():
     try:
         uid = _get_authenticated_uid()
         _delete_account_data(uid)
-        auth.delete_user(uid)
+        try:
+            auth.delete_user(uid)
+        except auth.UserNotFoundError:
+            # A previous request may have deleted Auth successfully but lost
+            # its response before the app could sign out locally.
+            pass
         return jsonify({"status": "deleted"})
     except PermissionError as error:
         return _authentication_error(error)
