@@ -25,6 +25,8 @@ PHOTO_WEEKLY_GENERATION_LIMIT = 5
 PHOTO_MAX_UPLOAD_BYTES = 3 * 1024 * 1024
 PHOTO_MAX_IMAGE_SIDE = 640
 PHOTO_JPEG_QUALITY = 45
+# Set to True temporarily when the public health page is needed for debugging.
+STRONA_HEALTH_WLACZONA = False
 DEFAULT_DATABASE_URL = (
     "https://fridgemateai-325db-default-rtdb.firebaseio.com"
 )
@@ -450,6 +452,9 @@ def hello():
 
 @app.route("/health", methods=["GET"])
 def health():
+    if not STRONA_HEALTH_WLACZONA:
+        return jsonify({"error": "Not Found"}), 404
+
     checks = {
         "ok": True,
         "firebaseServiceAccountJson": bool(
