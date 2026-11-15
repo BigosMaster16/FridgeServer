@@ -234,7 +234,9 @@ def _get_authenticated_uid():
         raise PermissionError("Brak tokenu autoryzacyjnego")
 
     _initialize_firebase()
-    decoded_token = auth.verify_id_token(token)
+    # Checking revocation also makes tokens from deleted accounts unusable
+    # immediately instead of trusting a locally cached Firebase session.
+    decoded_token = auth.verify_id_token(token, check_revoked=True)
     return decoded_token["uid"]
 
 
