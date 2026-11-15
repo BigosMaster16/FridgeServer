@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import firebase_admin
 import google.generativeai as genai
 from firebase_admin import auth, credentials, db
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -42,6 +42,166 @@ class PhotoWeeklyLimitExceeded(Exception):
 
 class DuplicateRewardTransaction(Exception):
     pass
+
+
+FIREBASE_WEB_CONFIG = json.dumps(
+    {
+        "apiKey": "AIzaSyDcMNFLNUovqKhtzYJE9M__9rObhR9hMpA",
+        "authDomain": "fridgemateai-325db.firebaseapp.com",
+        "projectId": "fridgemateai-325db",
+        "storageBucket": "fridgemateai-325db.firebasestorage.app",
+        "messagingSenderId": "18764183102",
+        "appId": "1:18764183102:android:99d3430a6c0c19497b036f",
+    }
+)
+
+
+DELETE_ACCOUNT_PAGE = r"""<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Usun konto | FridgeMate</title>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <style>
+    :root { color-scheme: light; font-family: Georgia, serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: #1f2a22;
+      background: radial-gradient(circle at 12% 8%, #dbead2 0 16%, transparent 38%),
+        linear-gradient(135deg, #f7f1e3, #fffaf1 56%, #e8f2df);
+      display: grid; place-items: center; padding: 24px;
+    }
+    main { width: min(100%, 500px); }
+    .brand { text-align: center; color: #1f5c3f; font-size: 18px; font-weight: 700; letter-spacing: .08em; margin-bottom: 18px; }
+    .card { background: rgba(255,255,255,.92); border: 1px solid rgba(255,255,255,.8); border-radius: 30px; padding: clamp(24px, 6vw, 42px); box-shadow: 0 24px 60px rgba(32,70,50,.14); }
+    h1 { margin: 0 0 12px; font-size: clamp(27px, 6vw, 38px); line-height: 1.1; }
+    .lead { color: #5c665f; line-height: 1.55; margin: 0 0 26px; }
+    label { display: block; color: #46524a; font-size: 14px; font-weight: 700; margin: 14px 0 7px; }
+    input { width: 100%; border: 1px solid #dce6d5; border-radius: 16px; padding: 15px 16px; font: inherit; font-size: 16px; background: #fffdf8; outline: none; }
+    input:focus { border-color: #2f7a4a; box-shadow: 0 0 0 3px rgba(47,122,74,.12); }
+    button { width: 100%; border: 0; border-radius: 17px; padding: 15px 18px; margin-top: 16px; font: inherit; font-weight: 700; font-size: 16px; cursor: pointer; background: #2f7a4a; color: white; }
+    button:hover { filter: brightness(.96); }
+    button:disabled { opacity: .55; cursor: wait; }
+    .google { background: #fff; color: #1f2a22; border: 1px solid #dce6d5; }
+    .danger { background: #b5542f; }
+    .divider { display: flex; align-items: center; gap: 12px; color: #8a958d; margin: 20px 0 4px; font-size: 13px; }
+    .divider:before, .divider:after { content: ''; height: 1px; background: #e5ebe1; flex: 1; }
+    .account { background: #eef6e9; border-radius: 18px; padding: 15px; margin: 20px 0; color: #2f6040; line-height: 1.45; overflow-wrap: anywhere; }
+    .warning { background: #fff3ec; color: #71351f; border: 1px solid #f1c2aa; border-radius: 18px; padding: 15px; line-height: 1.45; margin-top: 20px; }
+    .hint, .message { color: #68736b; font-size: 14px; line-height: 1.45; margin-top: 14px; }
+    .message.error { color: #a44225; }
+    .message.success { color: #2f7a4a; font-weight: 700; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">FRIDGEMATE AI</div>
+    <section class="card">
+      <div id="loginPanel">
+        <h1>Usun swoje konto</h1>
+        <p class="lead">Zaloguj się na konto FridgeMate AI, aby trwale usunąć konto i dane zapisane na serwerze.</p>
+        <form id="loginForm">
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="email" required>
+          <label for="password">Hasło</label>
+          <input id="password" type="password" autocomplete="current-password" required>
+          <button id="emailButton" type="submit">Zaloguj się przez email</button>
+        </form>
+        <div class="divider">lub</div>
+        <button id="googleButton" class="google" type="button">Zaloguj się przez Google</button>
+        <p id="loginMessage" class="message error"></p>
+      </div>
+
+      <div id="deletePanel" class="hidden">
+        <h1>Usunąć konto?</h1>
+        <p class="lead">Ta operacja jest nieodwracalna. Usunięte zostaną konto logowania, limity generowań i dane zapisane na serwerze.</p>
+        <div class="account">Zalogowane konto:<br><strong id="accountEmail"></strong></div>
+        <div class="warning"><strong>Uwaga:</strong> po usunięciu nie będzie można odzyskać tego konta ani jego danych.</div>
+        <label for="confirmation">Wpisz USUN, aby potwierdzić</label>
+        <input id="confirmation" autocomplete="off" spellcheck="false">
+        <button id="deleteButton" class="danger" type="button" disabled>Trwale usuń konto</button>
+        <button id="logoutButton" class="google" type="button">Wyloguj</button>
+        <p id="deleteMessage" class="message"></p>
+      </div>
+    </section>
+  </main>
+  <script>
+    firebase.initializeApp(__FIREBASE_CONFIG__);
+    const auth = firebase.auth();
+    const loginPanel = document.getElementById('loginPanel');
+    const deletePanel = document.getElementById('deletePanel');
+    const loginForm = document.getElementById('loginForm');
+    const loginMessage = document.getElementById('loginMessage');
+    const deleteMessage = document.getElementById('deleteMessage');
+    const confirmation = document.getElementById('confirmation');
+    const deleteButton = document.getElementById('deleteButton');
+    const setMessage = (element, message, success = false) => {
+      element.textContent = message || '';
+      element.className = `message ${success ? 'success' : 'error'}`;
+    };
+    const setBusy = (button, busy, label) => {
+      button.disabled = busy;
+      if (busy) button.dataset.label = button.textContent;
+      button.textContent = busy ? label : (button.dataset.label || button.textContent);
+    };
+
+    auth.onAuthStateChanged((user) => {
+      loginPanel.classList.toggle('hidden', !!user);
+      deletePanel.classList.toggle('hidden', !user);
+      if (user) document.getElementById('accountEmail').textContent = user.email || 'Konto Google';
+    });
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setMessage(loginMessage, '');
+      const button = document.getElementById('emailButton');
+      setBusy(button, true, 'Logowanie...');
+      try {
+        await auth.signInWithEmailAndPassword(document.getElementById('email').value.trim(), document.getElementById('password').value);
+      } catch (error) {
+        setMessage(loginMessage, 'Nie udało się zalogować. Sprawdź email i hasło.');
+      } finally { setBusy(button, false, 'Logowanie...'); }
+    });
+
+    document.getElementById('googleButton').addEventListener('click', async () => {
+      const button = document.getElementById('googleButton');
+      setBusy(button, true, 'Otwieranie Google...');
+      try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+      catch (error) { setMessage(loginMessage, 'Nie udało się zalogować przez Google. Sprawdź dozwolone domeny Firebase.'); }
+      finally { setBusy(button, false, 'Otwieranie Google...'); }
+    });
+
+    confirmation.addEventListener('input', () => { deleteButton.disabled = confirmation.value.trim().toUpperCase() !== 'USUN'; });
+    deleteButton.addEventListener('click', async () => {
+      const user = auth.currentUser;
+      if (!user || confirmation.value.trim().toUpperCase() !== 'USUN') return;
+      setMessage(deleteMessage, 'Usuwanie konta...');
+      setBusy(deleteButton, true, 'Usuwanie...');
+      try {
+        const token = await user.getIdToken(true);
+        const response = await fetch('/delete-account', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Nie udało się usunąć konta.');
+        await auth.signOut();
+        setMessage(deleteMessage, 'Konto zostało trwale usunięte.', true);
+      } catch (error) {
+        setMessage(deleteMessage, error.message || 'Nie udało się usunąć konta.');
+        setBusy(deleteButton, false, 'Usuwanie...');
+      }
+    });
+    document.getElementById('logoutButton').addEventListener('click', () => auth.signOut());
+  </script>
+</body>
+</html>"""
+
+
+DELETE_ACCOUNT_PAGE = DELETE_ACCOUNT_PAGE.replace(
+    "__FIREBASE_CONFIG__",
+    FIREBASE_WEB_CONFIG,
+)
 
 
 def _initialize_firebase():
@@ -495,6 +655,11 @@ def health():
         checks["firebase"] = str(error)
 
     return jsonify(checks), 200 if checks["ok"] else 500
+
+
+@app.route("/delete-account", methods=["GET"])
+def delete_account_page():
+    return Response(DELETE_ACCOUNT_PAGE, mimetype="text/html")
 
 
 @app.route("/delete-account", methods=["DELETE"])
