@@ -74,7 +74,9 @@ DELETE_ACCOUNT_PAGE = r"""<!doctype html>
       display: grid; place-items: center; padding: 24px;
     }
     main { width: min(100%, 500px); }
-    .brand { text-align: center; color: #1f5c3f; font-size: 18px; font-weight: 700; letter-spacing: .08em; margin-bottom: 18px; }
+    .brand { text-align: center; color: #1f5c3f; font-size: 18px; font-weight: 700; letter-spacing: .08em; margin-bottom: 10px; }
+    .language-wrap { display: flex; justify-content: center; margin-bottom: 18px; }
+    select { border: 1px solid #dce6d5; border-radius: 999px; padding: 8px 14px; color: #2f6040; background: rgba(255,255,255,.86); font: inherit; cursor: pointer; }
     .card { background: rgba(255,255,255,.92); border: 1px solid rgba(255,255,255,.8); border-radius: 30px; padding: clamp(24px, 6vw, 42px); box-shadow: 0 24px 60px rgba(32,70,50,.14); }
     h1 { margin: 0 0 12px; font-size: clamp(27px, 6vw, 38px); line-height: 1.1; }
     .lead { color: #5c665f; line-height: 1.55; margin: 0 0 26px; }
@@ -99,36 +101,92 @@ DELETE_ACCOUNT_PAGE = r"""<!doctype html>
 <body>
   <main>
     <div class="brand">FRIDGEMATE AI</div>
+    <div class="language-wrap">
+      <select id="languageSelect" aria-label="Language">
+        <option value="pl">Polski</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
+      </select>
+    </div>
     <section class="card">
       <div id="loginPanel">
-        <h1>Usun swoje konto</h1>
-        <p class="lead">Zaloguj się na konto FridgeMate AI, aby trwale usunąć konto i dane zapisane na serwerze.</p>
+        <h1 data-i18n="loginTitle">Usun swoje konto</h1>
+        <p class="lead" data-i18n="loginLead">Zaloguj się na konto FridgeMate AI, aby trwale usunąć konto i dane zapisane na serwerze.</p>
         <form id="loginForm">
-          <label for="email">Email</label>
-          <input id="email" type="email" autocomplete="email" required>
-          <label for="password">Hasło</label>
-          <input id="password" type="password" autocomplete="current-password" required>
-          <button id="emailButton" type="submit">Zaloguj się przez email</button>
+          <label for="email" data-i18n="emailLabel">Email</label>
+          <input id="email" type="email" autocomplete="email" required data-placeholder="emailPlaceholder">
+          <label for="password" data-i18n="passwordLabel">Hasło</label>
+          <input id="password" type="password" autocomplete="current-password" required data-placeholder="passwordPlaceholder">
+          <button id="emailButton" type="submit" data-i18n="emailLogin">Zaloguj się przez email</button>
         </form>
-        <div class="divider">lub</div>
-        <button id="googleButton" class="google" type="button">Zaloguj się przez Google</button>
+        <div class="divider" data-i18n="or">lub</div>
+        <button id="googleButton" class="google" type="button" data-i18n="googleLogin">Zaloguj się przez Google</button>
         <p id="loginMessage" class="message error"></p>
       </div>
 
       <div id="deletePanel" class="hidden">
-        <h1>Usunąć konto?</h1>
-        <p class="lead">Ta operacja jest nieodwracalna. Usunięte zostaną konto logowania, limity generowań i dane zapisane na serwerze.</p>
-        <div class="account">Zalogowane konto:<br><strong id="accountEmail"></strong></div>
-        <div class="warning"><strong>Uwaga:</strong> po usunięciu nie będzie można odzyskać tego konta ani jego danych.</div>
-        <label for="confirmation">Wpisz USUN, aby potwierdzić</label>
+        <h1 data-i18n="deleteTitle">Usunąć konto?</h1>
+        <p class="lead" data-i18n="deleteLead">Ta operacja jest nieodwracalna. Usunięte zostaną konto logowania, limity generowań i dane zapisane na serwerze.</p>
+        <div class="account"><span data-i18n="loggedAccount">Zalogowane konto:</span><br><strong id="accountEmail"></strong></div>
+        <div class="warning"><strong data-i18n="warningTitle">Uwaga:</strong> <span data-i18n="warningText">po usunięciu nie będzie można odzyskać tego konta ani jego danych.</span></div>
+        <label for="confirmation" data-i18n="confirmationLabel">Wpisz USUN, aby potwierdzić</label>
         <input id="confirmation" autocomplete="off" spellcheck="false">
-        <button id="deleteButton" class="danger" type="button" disabled>Trwale usuń konto</button>
-        <button id="logoutButton" class="google" type="button">Wyloguj</button>
+        <button id="deleteButton" class="danger" type="button" disabled data-i18n="deleteButton">Trwale usuń konto</button>
+        <button id="logoutButton" class="google" type="button" data-i18n="logoutButton">Wyloguj</button>
         <p id="deleteMessage" class="message"></p>
       </div>
     </section>
   </main>
   <script>
+    const translations = {
+      pl: {
+        loginTitle: 'Usun swoje konto', loginLead: 'Zaloguj się na konto FridgeMate AI, aby trwale usunąć konto i dane zapisane na serwerze.',
+        emailLabel: 'Email', emailPlaceholder: 'Wpisz email', passwordLabel: 'Hasło', passwordPlaceholder: 'Wpisz hasło',
+        emailLogin: 'Zaloguj się przez email', googleLogin: 'Zaloguj się przez Google', or: 'lub',
+        deleteTitle: 'Usunąć konto?', deleteLead: 'Ta operacja jest nieodwracalna. Usunięte zostaną konto logowania, limity generowań i dane zapisane na serwerze.',
+        loggedAccount: 'Zalogowane konto:', warningTitle: 'Uwaga:', warningText: 'po usunięciu nie będzie można odzyskać tego konta ani jego danych.',
+        confirmationLabel: 'Wpisz USUN, aby potwierdzić', confirmationWord: 'USUN', deleteButton: 'Trwale usuń konto', logoutButton: 'Wyloguj',
+        loggingIn: 'Logowanie...', googleOpening: 'Otwieranie Google...', deleting: 'Usuwanie...',
+        loginError: 'Nie udało się zalogować. Sprawdź email i hasło.', googleError: 'Nie udało się zalogować przez Google. Sprawdź dozwolone domeny Firebase.',
+        deletingMessage: 'Usuwanie konta...', deleteError: 'Nie udało się usunąć konta.', deleted: 'Konto zostało trwale usunięte.'
+      },
+      en: {
+        loginTitle: 'Delete your account', loginLead: 'Sign in to your FridgeMate AI account to permanently delete your account and data stored on the server.',
+        emailLabel: 'Email', emailPlaceholder: 'Enter your email', passwordLabel: 'Password', passwordPlaceholder: 'Enter your password',
+        emailLogin: 'Sign in with email', googleLogin: 'Sign in with Google', or: 'or',
+        deleteTitle: 'Delete account?', deleteLead: 'This action cannot be undone. Your sign-in account, generation limits and server data will be deleted.',
+        loggedAccount: 'Signed-in account:', warningTitle: 'Warning:', warningText: 'this account and its data cannot be recovered after deletion.',
+        confirmationLabel: 'Type DELETE to confirm', confirmationWord: 'DELETE', deleteButton: 'Permanently delete account', logoutButton: 'Sign out',
+        loggingIn: 'Signing in...', googleOpening: 'Opening Google...', deleting: 'Deleting...',
+        loginError: 'Could not sign in. Check your email and password.', googleError: 'Could not sign in with Google. Check Firebase authorized domains.',
+        deletingMessage: 'Deleting account...', deleteError: 'Could not delete the account.', deleted: 'Your account was permanently deleted.'
+      },
+      es: {
+        loginTitle: 'Eliminar tu cuenta', loginLead: 'Inicia sesión en tu cuenta de FridgeMate AI para eliminar permanentemente tu cuenta y los datos del servidor.',
+        emailLabel: 'Correo electrónico', emailPlaceholder: 'Escribe tu correo', passwordLabel: 'Contraseña', passwordPlaceholder: 'Escribe tu contraseña',
+        emailLogin: 'Iniciar sesión con correo', googleLogin: 'Iniciar sesión con Google', or: 'o',
+        deleteTitle: '¿Eliminar la cuenta?', deleteLead: 'Esta acción no se puede deshacer. Se eliminarán tu cuenta, los límites de generación y los datos del servidor.',
+        loggedAccount: 'Cuenta conectada:', warningTitle: 'Atención:', warningText: 'después de eliminarla, la cuenta y sus datos no se podrán recuperar.',
+        confirmationLabel: 'Escribe ELIMINAR para confirmar', confirmationWord: 'ELIMINAR', deleteButton: 'Eliminar cuenta permanentemente', logoutButton: 'Cerrar sesión',
+        loggingIn: 'Iniciando sesión...', googleOpening: 'Abriendo Google...', deleting: 'Eliminando...',
+        loginError: 'No se pudo iniciar sesión. Comprueba tu correo y contraseña.', googleError: 'No se pudo iniciar sesión con Google. Comprueba los dominios autorizados de Firebase.',
+        deletingMessage: 'Eliminando la cuenta...', deleteError: 'No se pudo eliminar la cuenta.', deleted: 'Tu cuenta se eliminó permanentemente.'
+      }
+    };
+    let language = localStorage.getItem('fridgemate-delete-language') || (navigator.language || 'pl').slice(0, 2);
+    if (!translations[language]) language = 'pl';
+    const t = (key) => translations[language][key] || translations.pl[key] || key;
+    const languageSelect = document.getElementById('languageSelect');
+    const applyLanguage = (nextLanguage) => {
+      language = translations[nextLanguage] ? nextLanguage : 'pl';
+      localStorage.setItem('fridgemate-delete-language', language);
+      languageSelect.value = language;
+      document.documentElement.lang = language;
+      document.querySelectorAll('[data-i18n]').forEach((element) => { element.textContent = t(element.dataset.i18n); });
+      document.querySelectorAll('[data-placeholder]').forEach((element) => { element.placeholder = t(element.dataset.placeholder); });
+    };
+    languageSelect.addEventListener('change', () => applyLanguage(languageSelect.value));
+    applyLanguage(language);
     firebase.initializeApp(__FIREBASE_CONFIG__);
     const auth = firebase.auth();
     const loginPanel = document.getElementById('loginPanel');
@@ -158,38 +216,38 @@ DELETE_ACCOUNT_PAGE = r"""<!doctype html>
       event.preventDefault();
       setMessage(loginMessage, '');
       const button = document.getElementById('emailButton');
-      setBusy(button, true, 'Logowanie...');
+      setBusy(button, true, t('loggingIn'));
       try {
         await auth.signInWithEmailAndPassword(document.getElementById('email').value.trim(), document.getElementById('password').value);
       } catch (error) {
-        setMessage(loginMessage, 'Nie udało się zalogować. Sprawdź email i hasło.');
-      } finally { setBusy(button, false, 'Logowanie...'); }
+        setMessage(loginMessage, t('loginError'));
+      } finally { setBusy(button, false, t('emailLogin')); }
     });
 
     document.getElementById('googleButton').addEventListener('click', async () => {
       const button = document.getElementById('googleButton');
-      setBusy(button, true, 'Otwieranie Google...');
+      setBusy(button, true, t('googleOpening'));
       try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
-      catch (error) { setMessage(loginMessage, 'Nie udało się zalogować przez Google. Sprawdź dozwolone domeny Firebase.'); }
-      finally { setBusy(button, false, 'Otwieranie Google...'); }
+      catch (error) { setMessage(loginMessage, t('googleError')); }
+      finally { setBusy(button, false, t('googleLogin')); }
     });
 
-    confirmation.addEventListener('input', () => { deleteButton.disabled = confirmation.value.trim().toUpperCase() !== 'USUN'; });
+    confirmation.addEventListener('input', () => { deleteButton.disabled = confirmation.value.trim().toUpperCase() !== t('confirmationWord'); });
     deleteButton.addEventListener('click', async () => {
       const user = auth.currentUser;
-      if (!user || confirmation.value.trim().toUpperCase() !== 'USUN') return;
-      setMessage(deleteMessage, 'Usuwanie konta...');
-      setBusy(deleteButton, true, 'Usuwanie...');
+      if (!user || confirmation.value.trim().toUpperCase() !== t('confirmationWord')) return;
+      setMessage(deleteMessage, t('deletingMessage'));
+      setBusy(deleteButton, true, t('deleting'));
       try {
         const token = await user.getIdToken(true);
         const response = await fetch('/delete-account', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || 'Nie udało się usunąć konta.');
+        if (!response.ok) throw new Error(data.error || t('deleteError'));
         await auth.signOut();
-        setMessage(deleteMessage, 'Konto zostało trwale usunięte.', true);
+        setMessage(deleteMessage, t('deleted'), true);
       } catch (error) {
-        setMessage(deleteMessage, error.message || 'Nie udało się usunąć konta.');
-        setBusy(deleteButton, false, 'Usuwanie...');
+        setMessage(deleteMessage, error.message || t('deleteError'));
+        setBusy(deleteButton, false, t('deleteButton'));
       }
     });
     document.getElementById('logoutButton').addEventListener('click', () => auth.signOut());
