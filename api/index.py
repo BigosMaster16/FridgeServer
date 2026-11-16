@@ -262,6 +262,46 @@ DELETE_ACCOUNT_PAGE = DELETE_ACCOUNT_PAGE.replace(
 )
 
 
+PRIVACY_POLICY_PAGE = r"""<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Polityka prywatności | FridgeMate</title>
+  <style>
+    :root { color-scheme: light; font-family: Georgia, serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: #1f2a22;
+      background: radial-gradient(circle at 12% 8%, #dbead2 0 16%, transparent 38%),
+        linear-gradient(135deg, #f7f1e3, #fffaf1 56%, #e8f2df);
+      display: grid; place-items: center; padding: 24px;
+    }
+    main { width: min(100%, 680px); }
+    .brand { text-align: center; color: #1f5c3f; font-size: 18px; font-weight: 700; letter-spacing: .08em; margin-bottom: 18px; }
+    .card { background: rgba(255,255,255,.92); border: 1px solid rgba(255,255,255,.8); border-radius: 30px; padding: clamp(26px, 6vw, 48px); box-shadow: 0 24px 60px rgba(32,70,50,.14); }
+    .badge { display: inline-block; background: #e3f0d9; color: #2f6040; border-radius: 999px; padding: 8px 13px; font-size: 13px; font-weight: 700; letter-spacing: .03em; margin-bottom: 20px; }
+    h1 { margin: 0 0 16px; font-size: clamp(30px, 6vw, 44px); line-height: 1.1; }
+    p { color: #5c665f; font-size: 17px; line-height: 1.65; margin: 0; }
+    .note { margin-top: 26px; padding: 18px 20px; border-radius: 20px; background: #fff3ec; border: 1px solid #f1c2aa; color: #71351f; line-height: 1.5; }
+    .footer { margin-top: 24px; text-align: center; color: #7a857d; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">FRIDGEMATE AI</div>
+    <section class="card">
+      <div class="badge">INFORMACJE</div>
+      <h1>Polityka prywatności</h1>
+      <p>Dbamy o przejrzystość i bezpieczeństwo korzystania z FridgeMate AI.</p>
+      <div class="note">Tu będzie później dostępna pełna polityka prywatności aplikacji.</div>
+    </section>
+    <div class="footer">FridgeMate AI</div>
+  </main>
+</body>
+</html>"""
+
+
 def _initialize_firebase():
     if firebase_admin._apps:
         return
@@ -720,6 +760,11 @@ def health():
 @app.route("/delete-account", methods=["GET"])
 def delete_account_page():
     return Response(DELETE_ACCOUNT_PAGE, mimetype="text/html")
+
+
+@app.route("/privacy-policy", methods=["GET"])
+def privacy_policy_page():
+    return Response(PRIVACY_POLICY_PAGE, mimetype="text/html")
 
 
 @app.route("/delete-account", methods=["DELETE"])
