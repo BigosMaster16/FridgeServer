@@ -206,10 +206,11 @@ DELETE_ACCOUNT_PAGE = r"""<!doctype html>
       button.textContent = busy ? label : (button.dataset.label || button.textContent);
     };
 
+    let deletionSucceeded = false;
     auth.onAuthStateChanged((user) => {
-      loginPanel.classList.toggle('hidden', !!user);
-      deletePanel.classList.toggle('hidden', !user);
-      if (user) document.getElementById('accountEmail').textContent = user.email || 'Konto Google';
+      loginPanel.classList.toggle('hidden', !!user || deletionSucceeded);
+      deletePanel.classList.toggle('hidden', !user && !deletionSucceeded);
+      if (user && !deletionSucceeded) document.getElementById('accountEmail').textContent = user.email || 'Konto Google';
     });
 
     loginForm.addEventListener('submit', async (event) => {
@@ -243,8 +244,12 @@ DELETE_ACCOUNT_PAGE = r"""<!doctype html>
         const response = await fetch('/delete-account', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || t('deleteError'));
-        await auth.signOut();
+        deletionSucceeded = true;
         setMessage(deleteMessage, t('deleted'), true);
+        setBusy(deleteButton, false, t('deleteButton'));
+        deleteButton.disabled = true;
+        document.getElementById('logoutButton').disabled = true;
+        try { await auth.signOut(); } catch (_) { /* Account is already deleted. */ }
       } catch (error) {
         setMessage(deleteMessage, error.message || t('deleteError'));
         setBusy(deleteButton, false, t('deleteButton'));
