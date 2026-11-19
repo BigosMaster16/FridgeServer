@@ -50,7 +50,7 @@ Body:
 }
 ```
 
-Serwer automatycznie kompresuje zdjecie do JPEG przed wyslaniem do Gemini:
+Serwer automatycznie kompresuje zdjecie do JPEG przed wyslaniem do OpenAI:
 
 - `PHOTO_MAX_IMAGE_SIDE` domyslnie `640`.
 - `PHOTO_JPEG_QUALITY` domyslnie `45`.
@@ -60,12 +60,11 @@ Limit zdjec: `5` generowan na tydzien na konto Firebase. Licznik zapisuje sie w 
 
 ## Zmienne srodowiskowe
 
-- `GEMINI_API_KEY` - klucz Gemini.
+- `OPENAI_API_KEY` - klucz API OpenAI (wymagany).
+- `OPENAI_MODEL` - opcjonalny model, domyslnie `gpt-6-luna`.
 - `FIREBASE_SERVICE_ACCOUNT_JSON` - JSON konta serwisowego Firebase.
 - `FIREBASE_DATABASE_URL` - opcjonalnie URL Realtime Database.
 - `GENERATION_TIMEZONE` - opcjonalnie, domyslnie `Europe/Warsaw`.
-- `GEMINI_MODEL` - opcjonalnie model dla generowania tekstowego, domyslnie `gemini-3.1-flash-lite`.
-- `PHOTO_GEMINI_MODEL` - opcjonalnie model dla zdjec, domyslnie `gemini-3.5-flash-lite`.
 - `ADMOB_REWARDED_AD_UNIT_ID` - opcjonalnie oczekiwany rewarded ad unit ID w callbacku SSV.
 - `ADMOB_REWARD_CUSTOM_DATA` - opcjonalnie, domyslnie `recipe_generation`.
 - `ADMOB_VERIFIER_KEYS_URL` - opcjonalnie, domyslnie publiczne klucze Google AdMob.
